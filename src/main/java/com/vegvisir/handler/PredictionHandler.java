@@ -6,14 +6,16 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.google.gson.Gson;
 import com.vegvisir.common.DBManager;
 import com.vegvisir.common.HttpUtil;
+import com.vegvisir.common.LogUtil;
 import com.vegvisir.common.entity.PredictionRequest;
-import com.vegvisir.common.entity.PredictionResult;
+import com.vegvisir.common.entity.PredictionResponse;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Timestamp;
+import java.sql.*;
 import java.time.LocalDateTime;
+import java.util.LinkedList;
+import java.util.List;
+
+import static com.vegvisir.common.LogUtil.LogLevel.*;
 
 @SuppressWarnings({"unused"})
 public class PredictionHandler implements RequestHandler<String, String> {
@@ -23,52 +25,42 @@ public class PredictionHandler implements RequestHandler<String, String> {
     @Override
     public String handleRequest(String request, Context ctx) {
         LambdaLogger logger = ctx.getLogger();
-        logger.log("Received register request: " + request);
+        LogUtil.log(logger, INFO, "Received register request: " + request);
 
         PredictionRequest predictionRequest = new Gson().fromJson(request, PredictionRequest.class);
 
         Connection conn = null;
         PreparedStatement updateStatement = null;
+        String response;
         try {
             conn = DBManager.getConnection();
             DBManager.initializeDB(conn);
-            logger.log("Get DB connection success");
+            LogUtil.log(logger, INFO, "Get DB connection success");
 
             String predictAddr = String.format("https://%s:%s/api/v1/predict", FinGPTHost, FinGPTPort);
-            String result = HttpUtil.sendHttpRequest(predictAddr, "POST", request);
-            PredictionResult predictionResult = new Gson().fromJson(result, PredictionResult.class);
+            response = HttpUtil.sendHttpRequest(predictAddr, "POST", request);
+            PredictionResponse predictionResponse = new Gson().fromJson(response, PredictionResponse.class);
+            LogUtil.log(logger, INFO, "Invoke FinGPT predict API success, result: " + predictionResponse.predictionResult());
 
             updateStatement = conn.prepareStatement("INSERT INTO ticker VALUES (DEFAULT, ?, ?, ?, ?, ?, ?);");
             updateStatement.setString(1, predictionRequest.tickerId());
-            updateStatement.setString(2, predictionResult.retrievedInfo());
-            updateStatement.setString(3, predictionResult.predictionResult());
+            updateStatement.setString(2, predictionResponse.retrievedInfo());
+            updateStatement.setString(3, predictionResponse.predictionResult());
             updateStatement.setInt(4, predictionRequest.period());
             updateStatement.setTimestamp(5, Timestamp.valueOf(LocalDateTime.now()));
             updateStatement.setLong(6, predictionRequest.customerId());
             updateStatement.executeUpdate();
-        } catch (ClassNotFoundException e) {
-            logger.log("Load DB driver error: " + e.getMessage());
-        } catch (SQLException e) {
-            logger.log("Execute SQL statement error: " + e.getMessage());
+            LogUtil.log(logger, INFO, "Update ticker table success");
         } catch (Exception e) {
-            logger.log("Handle prediction request error: " + e.getMessage());
+            LogUtil.log(logger, ERROR, "Handle prediction request error: " + e.getMessage());
+            return null;
         } finally {
-            if (updateStatement != null) {
-                try {
-                    updateStatement.close();
-                } catch (SQLException e) {
-                    logger.log("Close SQL statement error: " + e.getMessage());
-                }
-            }
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    logger.log("Close DB connection error: " + e.getMessage());
-                }
-            }
+            List<Statement> delResources = new LinkedList<>();
+            delResources.add(updateStatement);
+            DBManager.closeResource(logger, conn, delResources, null);
         }
 
-        return "Handle prediction request success";
+        LogUtil.log(logger, INFO, "Handle prediction request success");
+        return response;
     }
 }

@@ -1,9 +1,11 @@
 package com.vegvisir.common;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
+
+import java.sql.*;
+import java.util.List;
+
+import static com.vegvisir.common.LogUtil.LogLevel.*;
 
 public class DBManager {
     private static final String hostname = System.getenv("RDS_HOSTNAME");
@@ -43,5 +45,38 @@ public class DBManager {
         setupStatement.addBatch(createTickerTable);
         setupStatement.executeBatch();
         setupStatement.close();
+    }
+
+    public static void closeResource(LambdaLogger logger, Connection conn, List<Statement> statements,
+                                     List<ResultSet> resultSets) {
+        if (resultSets != null) {
+            for (ResultSet rs: resultSets) {
+                if (rs != null) {
+                    try {
+                        rs.close();
+                    } catch (SQLException e) {
+                        LogUtil.log(logger, ERROR, "Close ResultSet error: " + e.getMessage());
+                    }
+                }
+            }
+        }
+        if (statements != null) {
+            for (Statement st: statements) {
+                if (st != null) {
+                    try {
+                        st.close();
+                    } catch (SQLException e) {
+                        LogUtil.log(logger, ERROR, "Close SQL statement error: " + e.getMessage());
+                    }
+                }
+            }
+        }
+        if (conn != null) {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                LogUtil.log(logger, ERROR, "Close DB connection error: " + e.getMessage());
+            }
+        }
     }
 }
