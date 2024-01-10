@@ -11,8 +11,10 @@ import com.vegvisir.common.entity.Customer;
 import java.sql.*;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.UUID;
 
-import static com.vegvisir.common.LogUtil.LogLevel.*;
+import static com.vegvisir.common.LogUtil.LogLevel.ERROR;
+import static com.vegvisir.common.LogUtil.LogLevel.INFO;
 
 @SuppressWarnings("unused")
 public class RegisterHandler implements RequestHandler<String, String> {
@@ -31,10 +33,14 @@ public class RegisterHandler implements RequestHandler<String, String> {
             DBManager.initializeDB(conn);
             LogUtil.log(logger, INFO, "Get DB connection success");
 
-            updateStatement = conn.prepareStatement("INSERT INTO customer VALUES (DEFAULT, ?, ?, ?);");
-            updateStatement.setString(1, c.username());
-            updateStatement.setString(2, c.email());
-            updateStatement.setString(3, c.stripeToken());
+            updateStatement = conn.prepareStatement("INSERT INTO customer VALUES (?, ?, ?, ?, ?);");
+            UUID uuid = UUID.randomUUID();
+            Array history = conn.createArrayOf("BIGINT", c.history().toArray(new Long[0]));
+            updateStatement.setObject(1, uuid, Types.OTHER);
+            updateStatement.setString(2, c.username());
+            updateStatement.setString(3, c.email());
+            updateStatement.setString(4, c.stripeToken());
+            updateStatement.setArray(5, history);
             updateStatement.executeUpdate();
             LogUtil.log(logger, INFO, "Store customer info into DB success");
         } catch (Exception e) {

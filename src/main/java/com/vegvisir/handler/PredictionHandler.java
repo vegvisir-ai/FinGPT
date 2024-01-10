@@ -48,16 +48,16 @@ public class PredictionHandler implements RequestHandler<String, String> {
             updateStatement.setString(3, predictionResponse.predictionResult());
             updateStatement.setInt(4, predictionRequest.period());
             updateStatement.setTimestamp(5, Timestamp.valueOf(LocalDateTime.now()));
-            updateStatement.setLong(6, predictionRequest.customerId());
+            updateStatement.setString(6, predictionRequest.customerEmail());
             updateStatement.executeUpdate();
             LogUtil.log(logger, INFO, "Update ticker table success");
         } catch (Exception e) {
             LogUtil.log(logger, ERROR, "Handle prediction request error: " + e.getMessage());
             return null;
         } finally {
-            List<Statement> delResources = new LinkedList<>();
-            delResources.add(updateStatement);
-            DBManager.closeResource(logger, conn, delResources, null);
+            List<Statement> delStatements = new LinkedList<>();
+            delStatements.add(updateStatement);
+            DBManager.closeResource(logger, conn, delStatements, null);
         }
 
         LogUtil.log(logger, INFO, "Handle prediction request success");
